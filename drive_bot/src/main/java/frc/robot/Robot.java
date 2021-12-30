@@ -4,10 +4,18 @@
 
 package frc.robot;
 
+import java.time.Duration;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import frc.subsystems.Drive;
+import frc.subsystems.RobotTracker;
+import frc.subsystems.VisionManager;
+import frc.util.multithreading.ThreadScheduler;
 
 /**
  * The VM is configured to automatically run this class, and to call the functions corresponding to
@@ -21,8 +29,18 @@ public class Robot extends TimedRobot {
   private String m_autoSelected;
   private final SendableChooser<String> m_chooser = new SendableChooser<>();
 
+  private Drive drive = Drive.getInstance();
+  private RobotTracker tracker = RobotTracker.getInstance();
+  private VisionManager visionManager = VisionManager.getInstance();
+
   public static Joystick leftStick = new Joystick(1);
   public static Joystick rightStick = new Joystick(2);
+  public static Joystick operator = new Joystick(0);
+
+  //Multithreading stuff
+  ExecutorService executor = Executors.newFixedThreadPool(2); //More than 2 threads is redundant as roborio only has two cores
+  ThreadScheduler scheduler = new ThreadScheduler();
+  Thread auto;
 
   /**
    * This function is run when the robot is first started up and should be used for any
@@ -30,9 +48,14 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void robotInit() {
-    m_chooser.setDefaultOption("Default Auto", kDefaultAuto);
-    m_chooser.addOption("My Auto", kCustomAuto);
-    SmartDashboard.putData("Auto choices", m_chooser);
+
+    drive.setPeriod(Duration.ofMillis(20));
+    tracker.setPeriod(Duration.ofMillis(5));
+    visionManager.setPeriod(Duration.ofMillis(5));
+
+    scheduler.schedule(drive, executor);
+    scheduler.schedule(tracker, executor);
+    scheduler.schedule(visionManager, executor);
   }
 
   /**
@@ -60,6 +83,7 @@ public class Robot extends TimedRobot {
     m_autoSelected = m_chooser.getSelected();
     // m_autoSelected = SmartDashboard.getString("Auto Selector", kDefaultAuto);
     System.out.println("Auto selected: " + m_autoSelected);
+    scheduler.resume();
   }
 
   /** This function is called periodically during autonomous. */
@@ -78,11 +102,31 @@ public class Robot extends TimedRobot {
 
   /** This function is called once when teleop is enabled. */
   @Override
-  public void teleopInit() {}
+  public void teleopInit(){
+    Drive.getInstance().setTeleop();
+    tracker.resetOdometry();
+    scheduler.resume();
+    Drive.getInstance().resetGyro();
+  }
 
   /** This function is called periodically during operator control. */
   @Override
-  public void teleopPeriodic() {}
+  public void teleopPeriodic() {
+    if(leftStick.getRawButton(1))
+      Drive.getInstance().turnToAngle(tracker.getOdometry().getRotation().getDegrees()-visionManager.getTargetYaw());
+
+  }
+
+  @Override
+  public void simulationInit() {
+    scheduler.resume();
+    Drive.getInstance().setSimulation();
+  }
+
+  @Override
+  public void simulationPeriodic() {
+    
+  }
 
   /** This function is called once when the robot is disabled. */
   @Override

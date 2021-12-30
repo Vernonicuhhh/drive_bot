@@ -5,7 +5,7 @@ import frc.robot.Constants;
 public class CommonConversions {
   
      public static double stepsToMeters(double steps){
-      return steps*(Constants.PhysicalConstants.TRACK_WIDTH_METERS * Math.PI / 2048/ Constants.PhysicalConstants.GEAR_RATIO);
+      return steps*((.1524 * Math.PI) / (2048* Constants.PhysicalConstants.GEAR_RATIO));
 
 
   }

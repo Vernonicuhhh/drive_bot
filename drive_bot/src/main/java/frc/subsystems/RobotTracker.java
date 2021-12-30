@@ -3,6 +3,7 @@ package frc.subsystems;
 import edu.wpi.first.wpilibj.geometry.Pose2d;
 import edu.wpi.first.wpilibj.geometry.Rotation2d;
 import edu.wpi.first.wpilibj.kinematics.DifferentialDriveOdometry;
+import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import frc.util.multithreading.Threaded;
 
@@ -13,6 +14,8 @@ public class RobotTracker extends Threaded {
 
     private DifferentialDriveOdometry differentialDriveOdometry = new DifferentialDriveOdometry(drive.getRotation2d()); // can I just use the getRotation2d or do I have to create a new rotation 2d object?
     private Pose2d poseMeters;
+
+    //Field2d field = new Field2d();
 
 
 
@@ -25,7 +28,10 @@ public class RobotTracker extends Threaded {
         synchronized(this){
             differentialDriveOdometry.update(heading, leftDist, rightDist);
             poseMeters = differentialDriveOdometry.getPoseMeters();
-            
+      //      field.setRobotPose(poseMeters);
+
+        //    SmartDashboard.putData("field",field);
+
 			SmartDashboard.putNumber("PoseX", differentialDriveOdometry.getPoseMeters().getTranslation().getX());
 			SmartDashboard.putNumber("PoseY", differentialDriveOdometry.getPoseMeters().getTranslation().getY());
 			SmartDashboard.putNumber("PoseR", differentialDriveOdometry.getPoseMeters().getRotation().getDegrees());

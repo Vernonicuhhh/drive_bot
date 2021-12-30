@@ -14,26 +14,40 @@ public class Constants {
         public static final double WHEEL_CIRCUMFERENCE_INCHES = 2* WHEEL_DIAMETER_INCHES*Math.PI;
         public static final double WHEEL_CIRCUMFERENCE_METERS = Units.inchesToMeters(WHEEL_DIAMETER_INCHES)*Math.PI;
 
-        public static final double TRACK_WIDTH_METERS = .2159;
+        public static final double TRACK_WIDTH_METERS = .752032621;
+        public static final double TRACK_WIDTH_FEET = Units.metersToFeet(TRACK_WIDTH_METERS);
 
     }
 
     public static class DriveConstants{
-        public static final double STICK_DEADBAND = .15;
-        public static final double MAX_SPEED_TELE = 0;
-
+        public static final double STICK_DEADBAND = 0.1;
+        public static final double MAX_SPEED_TELE = 5;
         // voltage needed to overcome the motor's static friction
-        public static final double kS = 0;
+      /*  public static final double kS = .758;
 
         //voltage needed to hold (cruise) at a given velocity.
-        public static final double kA = 0;
+        public static final double kA = .0986;
 
         // voltage needed to induce a given acceleration at the motor shaft
-        public static final double kV = 0;
+        public static final double kV = .782;
 
-        public static final SimpleMotorFeedforward VELOCITY_FEED_FORWARD = new SimpleMotorFeedforward(kS, kV, kA);
+        public static final double kP = 2.5E-3;//-9;
+*/
+        public static final double kS = .755;
 
-        public static final double kP = 0;
+        //voltage needed to hold (cruise) at a given velocity.
+        public static final double kA = .183;
+
+        public static final double kV = 1.58;
+
+        public static final double kP = 3.32E-2;
+        // voltage needed to induce a given acceleration at the motor shaft
+        public static final SimpleMotorFeedforward VELOCITY_FEED_FORWARD = new SimpleMotorFeedforward(kS, kV,kA);
+
+        public static final double kSAngular =  1.21;
+        public static final double kVAngular =  1.72;
+        public static final double kAAngular =  .056;
+        
 
         public static final int DEVICE_ID_LEFT_MASTER = 8;
         public static final int DEVICE_ID_LEFT_SLAVE = 7;
