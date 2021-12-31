@@ -11,7 +11,6 @@ import java.util.concurrent.Executors;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
-import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import frc.subsystems.Drive;
 import frc.subsystems.RobotTracker;
 import frc.subsystems.VisionManager;
@@ -117,11 +116,6 @@ public class Robot extends TimedRobot {
 
   }
 
-  @Override
-  public void simulationInit() {
-    scheduler.resume();
-    Drive.getInstance().setSimulation();
-  }
 
   @Override
   public void simulationPeriodic() {

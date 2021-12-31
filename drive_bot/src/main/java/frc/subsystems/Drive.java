@@ -1,28 +1,31 @@
 package frc.subsystems;
 
+import java.util.ArrayList;
+
 import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.ctre.phoenix.motorcontrol.DemandType;
 import com.ctre.phoenix.motorcontrol.FeedbackDevice;
+import com.ctre.phoenix.motorcontrol.InvertType;
 import com.ctre.phoenix.motorcontrol.NeutralMode;
-import com.ctre.phoenix.motorcontrol.TalonSRXSimCollection;
 import com.ctre.phoenix.motorcontrol.can.TalonFX;
 import com.ctre.phoenix.motorcontrol.can.TalonFXConfiguration;
 import com.kauailabs.navx.frc.AHRS;
 
-import edu.wpi.first.hal.SimDouble;
-import edu.wpi.first.hal.simulation.SimDeviceDataJNI;
-import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.SPI;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.controller.PIDController;
+import edu.wpi.first.wpilibj.controller.RamseteController;
 import edu.wpi.first.wpilibj.geometry.Rotation2d;
+import edu.wpi.first.wpilibj.kinematics.ChassisSpeeds;
+import edu.wpi.first.wpilibj.kinematics.DifferentialDriveWheelSpeeds;
 import edu.wpi.first.wpilibj.simulation.DifferentialDrivetrainSim;
-import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.system.plant.DCMotor;
 import edu.wpi.first.wpilibj.system.plant.LinearSystemId;
+import edu.wpi.first.wpilibj.trajectory.Trajectory;
 import edu.wpi.first.wpilibj.util.Units;
 import edu.wpi.first.wpiutil.math.VecBuilder;
+import frc.auto.PathTrigger;
 import frc.robot.Constants;
 import frc.robot.Robot;
 import frc.util.CommonConversions;
@@ -32,46 +35,33 @@ import frc.util.multithreading.Threaded;
 
 
 public class Drive extends Threaded {
-    TalonFX leftMaster;
-    TalonFX leftSlave;
-    TalonFX rightMaster;
-    TalonFX rightSlave;
+    private TalonFX leftMaster;
+    private TalonFX leftSlave;
+    private TalonFX rightMaster;
+    private TalonFX rightSlave;
+    private AHRS gyro = new AHRS(SPI.Port.kMXP);
 
-    Timer oscilationTimer;
+    private Rotation2d desiredHeading;
+    private DriveState driveState = DriveState.TELEOP;
+    private static Drive instance;
 
-    Rotation2d desiredHeading;
-    
-    DriveState driveState = DriveState.TELEOP;
+    private ArrayList <PathTrigger> triggers = new ArrayList<>();
+    private Trajectory currentTrajectory;
+    private Timer ramseteTimer;
+    private RamseteController ramseteController;
+    private double previousTime;
 
-    static Drive instance;
-
-    AHRS gyro = new AHRS(SPI.Port.kMXP);
-    
-    Field2d field = new Field2d();
-
-
-    //SynchronousPID turnPID;
-    PIDController turnPID;
+    private PIDController turnPID;
 
     DifferentialDrivetrainSim driveSim;
-    TalonSRXSimCollection leftSimCollection;
-    TalonSRXSimCollection rightSimCollection;
 
     public Drive(){
         leftMaster = new TalonFX(Constants.DriveConstants.DEVICE_ID_LEFT_MASTER);
         leftSlave = new TalonFX(Constants.DriveConstants.DEVICE_ID_LEFT_SLAVE);
         rightMaster = new TalonFX(Constants.DriveConstants.DEVICE_ID_RIGHT_MASTER);
         rightSlave = new TalonFX(Constants.DriveConstants.DEVICE_ID_RIGHT_SLAVE);
-        if(Robot.isSimulation()){
-            leftMaster.setNeutralMode(NeutralMode.Coast);
-            leftSlave.setNeutralMode(NeutralMode.Coast);
-            rightMaster.setNeutralMode(NeutralMode.Coast);
-            rightSlave.setNeutralMode(NeutralMode.Coast);
-            leftSlave.follow(leftMaster);
-            rightSlave.follow(rightMaster);
-        }
         
-       else{
+
         leftMaster.configSelectedFeedbackSensor(FeedbackDevice.IntegratedSensor, 0, 10);
         rightMaster.configSelectedFeedbackSensor(FeedbackDevice.IntegratedSensor, 0, 10);
 
@@ -96,22 +86,22 @@ public class Drive extends Threaded {
 
         leftMaster.setInverted(true);
         rightMaster.setInverted(false);
-        leftSlave.setInverted(true);
-        rightSlave.setInverted(false);
+        leftSlave.setInverted(InvertType.FollowMaster);
+        rightSlave.setInverted(InvertType.FollowMaster);
 
         leftMaster.setNeutralMode(NeutralMode.Coast);
         leftSlave.setNeutralMode(NeutralMode.Coast);
         rightMaster.setNeutralMode(NeutralMode.Coast);
         rightSlave.setNeutralMode(NeutralMode.Coast);
-       }
-        zeroEncoders();
 
         //turnPID = new SynchronousPID(-.0001, 0, 0, 0);
         //turnPID = new PIDController(.0250033,0,.000725,.01); //.0250033 //.000615
         turnPID = new PIDController(.01862,0,.003863555105);
-        //turnPID = new PIDController(.1,0,0);
-        
-        oscilationTimer = new Timer();
+
+        ramseteController = new RamseteController();
+        ramseteTimer = new Timer();
+
+        zeroEncoders();
 
         driveSim = new DifferentialDrivetrainSim(
             LinearSystemId.identifyDrivetrainSystem(Constants.DriveConstants.kV, Constants.DriveConstants.kA, Constants.DriveConstants.kVAngular, Constants.DriveConstants.kAAngular),
@@ -121,8 +111,6 @@ public class Drive extends Threaded {
             Constants.PhysicalConstants.WHEEL_DIAMETER_METERS,
             VecBuilder.fill(0.001, 0.001, 0.001, 0.1, 0.1, 0.005, 0.005)
         );
-         leftSimCollection = new TalonSRXSimCollection(leftMaster);
-         rightSimCollection = new TalonSRXSimCollection(rightMaster);
 
 
     }
@@ -132,7 +120,6 @@ public class Drive extends Threaded {
         AUTO,
         TURN,
         VISION_TRACKING,
-        SIMULATION,
         DONE
     }
     @Override
@@ -149,18 +136,14 @@ public class Drive extends Threaded {
             case TURN:
                 updateTurn();
                 SmartDashboard.putString("Drive State", "turn");
-                SmartDashboard.putNumber("oscilation period", oscilationTimer.get());
                 break;
             case AUTO:
+                updatePathController();
                 SmartDashboard.putString("Drive State", "auto");
                 break;
             case VISION_TRACKING:
                 updateVisionTracking();
                 SmartDashboard.putString("Drive State", "vision tracking");
-                break;
-            case SIMULATION:
-                updateSimulation();
-                SmartDashboard.putString("Drive State", "simulation"); 
                 break;
             case DONE:
                 SmartDashboard.putString("Drive State", "done");
@@ -181,17 +164,62 @@ public class Drive extends Threaded {
         }
     }
 
-    public synchronized void setSimulation(){
-        driveState = DriveState.SIMULATION;
+    public synchronized void setAutoPath(Trajectory desiredTrajectory,ArrayList<PathTrigger>actions){
+        ramseteTimer.reset();
+        ramseteTimer.start();
+        currentTrajectory = desiredTrajectory;
+        driveState = DriveState.AUTO;
+        updatePathController();
+        triggers = actions;
     }
+
+    public synchronized void setAutoPath(Trajectory desiredTrajectory){
+        ramseteTimer.reset();
+        ramseteTimer.start();
+        currentTrajectory = desiredTrajectory;
+        driveState = DriveState.AUTO;
+        updatePathController();
+    }
+
 
     public synchronized void setTracking(){
         driveState = DriveState.VISION_TRACKING;
     }
 
     private void updateTeleop(){
-        //tankDriveTeleOp(-Robot.leftStick.getY(), -Robot.rightStick.getY());
-        tankDriveTeleOp(.2, .2);
+        tankDriveTeleOp(-Robot.leftStick.getY(), -Robot.rightStick.getY());
+    }
+
+    private void updatePathController(){
+        double currentTime = ramseteTimer.get();
+        SmartDashboard.putBoolean("finished",isFinished());
+        while (!triggers.isEmpty()) {
+			if (triggers.get(0).getPercentage() <= getPathPercentage()) {
+        triggers.remove(0).playTrigger();
+			} else {
+				break;
+			}
+		}
+
+        Trajectory.State desiredPose = currentTrajectory.sample(currentTime);
+        ChassisSpeeds speedSetpoint = ramseteController.calculate(RobotTracker.getInstance().getOdometry(), desiredPose);
+
+        DifferentialDriveWheelSpeeds wheelSpeeds = Constants.DriveConstants.DRIVE_KINEMATICS.toWheelSpeeds(speedSetpoint);
+
+        double leftSetpoint = wheelSpeeds.leftMetersPerSecond;
+        double rightSetpoint = wheelSpeeds.rightMetersPerSecond;
+        double dt = (currentTime-previousTime)*10;
+        boolean finished = ramseteTimer.hasPeriodPassed(currentTrajectory.getTotalTimeSeconds());
+
+        if(finished){
+            synchronized(this){
+                driveState = DriveState.DONE;
+            }
+            ramseteTimer.stop();
+        }
+
+        tankDriveVelocity(leftSetpoint, rightSetpoint, dt);
+        previousTime = currentTime;
     }
 
     private void updateTurn(){
@@ -204,7 +232,6 @@ public class Drive extends Threaded {
      
 
         if(Math.abs(deltaSpeed)<1E-1){
-            oscilationTimer.stop();
             /*synchronized(this){
                 driveState = DriveState.TELEOP;
             }*/
@@ -230,25 +257,7 @@ public class Drive extends Threaded {
 		}*/
     }
 
-    private void updateSimulation(){
-        driveSim.setInputs(leftMaster.getMotorOutputVoltage(), rightMaster.getMotorOutputVoltage());
-        driveSim.update(.02);
-        leftSimCollection.setQuadratureRawPosition((int)CommonConversions.metersToSteps(driveSim.getLeftPositionMeters()));
-        rightSimCollection.setQuadratureRawPosition((int)CommonConversions.metersToSteps(driveSim.getRightPositionMeters()));
-        leftSimCollection.setQuadratureVelocity((int)CommonConversions.metersPerSecToStepsPerDecisec(driveSim.getLeftVelocityMetersPerSecond()));
-        rightSimCollection.setQuadratureVelocity((int)CommonConversions.metersPerSecToStepsPerDecisec(driveSim.getRightVelocityMetersPerSecond()));
 
-        int dev = SimDeviceDataJNI.getSimDeviceHandle("navx-Sensor[0");
-        SimDouble angle = new SimDouble(SimDeviceDataJNI.getSimValueHandle(dev, "Yaw"));
-        angle.set(Math.IEEEremainder(-driveSim.getHeading().getDegrees(), 360));
-
-        leftSimCollection.setBusVoltage(RobotController.getBatteryVoltage());
-        rightSimCollection.setBusVoltage(RobotController.getBatteryVoltage());
-        driveSim.setPose(RobotTracker.getInstance().getOdometry());
-        field.setRobotPose(driveSim.getPose());
-
-        SmartDashboard.putData("field", field);
-    }
 
     private void tankDriveTeleOp(double leftSpeed, double rightSpeed){
         if(Math.abs(leftSpeed)<=Constants.DriveConstants.STICK_DEADBAND){
@@ -288,13 +297,12 @@ public class Drive extends Threaded {
    * @param right right velocity of robot in meters/sec
    */
     private void tankDriveVelocity(double leftSetpoint,double rightSetpoint){
-
         //get actual velocities of the drivetrain, parameters are setpoints
         double actualLeft = getLeftVelocity();
         double actualRight = getRightVelocity();
 
         SmartDashboard.putNumber("left Veloctiy", actualLeft);
-        SmartDashboard.putNumber("left setpoin", leftSetpoint);
+        SmartDashboard.putNumber("left setpoint", leftSetpoint);
 
         //find acceleration setpoint using: a = dv/dt
         //in this case dt is .2 because this runs every 20ms
@@ -306,7 +314,6 @@ public class Drive extends Threaded {
         double leftFF = Constants.DriveConstants.VELOCITY_FEED_FORWARD.calculate(leftSetpoint,leftAccelSetpoint);
         double rightFF = Constants.DriveConstants.VELOCITY_FEED_FORWARD.calculate(rightSetpoint, rightAccelSetpoint);
 
-
         SmartDashboard.putNumber("error", Math.abs(actualLeft-leftSetpoint));
 
         SmartDashboard.putNumber("voltage", leftFF);
@@ -314,13 +321,49 @@ public class Drive extends Threaded {
         if(leftSetpoint == 0)
             leftMaster.set(ControlMode.PercentOutput, 0);
         else
-            leftMaster.set(ControlMode.Velocity,CommonConversions.metersPerSecToStepsPerDecisec(leftSetpoint), DemandType.ArbitraryFeedForward,leftFF/16); //divide by 12 bc feedforward returns voltage input to motor, dividing by 12 would make it in range of [-1,1]
+            leftMaster.set(ControlMode.Velocity,CommonConversions.metersPerSecToStepsPerDecisec(leftSetpoint), DemandType.ArbitraryFeedForward,leftFF/12); //divide by 12 bc feedforward returns voltage input to motor, dividing by 12 would make it in range of [-1,1]
 
         if(rightSetpoint == 0)
             rightMaster.set(ControlMode.PercentOutput, 0);
         else
-            rightMaster.set(ControlMode.Velocity,CommonConversions.metersPerSecToStepsPerDecisec(rightSetpoint), DemandType.ArbitraryFeedForward,rightFF/16);
+            rightMaster.set(ControlMode.Velocity,CommonConversions.metersPerSecToStepsPerDecisec(rightSetpoint), DemandType.ArbitraryFeedForward,rightFF/12);
         
+    }
+
+    /**
+   * controls the drivetrain at a given velocity during teleoperated control
+   * @param left left velocity of robot in meters/sec
+   * @param right right velocity of robot in meters/sec
+   * @param dt change in time
+   */
+    private void tankDriveVelocity(double leftSetpoint,double rightSetpoint,double dt){
+        //get actual velocities of the drivetrain, parameters are setpoints
+        double actualLeft = getLeftVelocity();
+        double actualRight = getRightVelocity();
+
+        SmartDashboard.putNumber("left Veloctiy", actualLeft);
+        SmartDashboard.putNumber("left setpoint", leftSetpoint);
+
+        //find acceleration setpoint using: a = dv/dt
+        //in this case dt is .2 because this runs every 20ms
+        double leftAccelSetpoint = (leftSetpoint - actualLeft)/dt;
+        double rightAccelSetpoint = (rightSetpoint-actualRight)/dt;
+
+        // calculate the voltage needed to get to velocity and acceleration setpoint
+        double leftFF = Constants.DriveConstants.VELOCITY_FEED_FORWARD.calculate(leftSetpoint,leftAccelSetpoint);
+        double rightFF = Constants.DriveConstants.VELOCITY_FEED_FORWARD.calculate(rightSetpoint, rightAccelSetpoint);
+
+        SmartDashboard.putNumber("error", Math.abs(actualLeft-leftSetpoint));
+
+        if(leftSetpoint == 0)
+            leftMaster.set(ControlMode.PercentOutput, 0);
+        else
+            leftMaster.set(ControlMode.Velocity,CommonConversions.metersPerSecToStepsPerDecisec(leftSetpoint), DemandType.ArbitraryFeedForward,leftFF/12); //divide by 12 bc feedforward returns voltage input to motor, dividing by 12 would make it in range of [-1,1]
+
+        if(rightSetpoint == 0)
+            rightMaster.set(ControlMode.PercentOutput, 0);
+        else
+            rightMaster.set(ControlMode.Velocity,CommonConversions.metersPerSecToStepsPerDecisec(rightSetpoint), DemandType.ArbitraryFeedForward,rightFF/12);
     }
 
     /**
@@ -332,14 +375,19 @@ public class Drive extends Threaded {
         synchronized(this){
         driveState = DriveState.TURN;
         desiredHeading = new Rotation2d(Units.degreesToRadians(angle));
-        oscilationTimer.reset(); //this might not need to be in the synchronized block
-        oscilationTimer.start();
         }
     }
 
     private void updateVisionTracking(){
         double deltaSpeed = turnPID.calculate(-VisionManager.getInstance().getTargetYaw(), 0);
         setRawSpeeds(deltaSpeed, -deltaSpeed);
+    }
+
+    private double getPathPercentage(){
+        return ramseteTimer.get()/currentTrajectory.getTotalTimeSeconds();
+    }
+    private boolean isFinished(){
+        return driveState == DriveState.DONE;
     }
 
     /**
@@ -372,6 +420,11 @@ public class Drive extends Threaded {
      */
     private double getRightVelocity(){
         return CommonConversions.stepsPerDecisecToMetersPerSec(rightMaster.getSelectedSensorVelocity());
+    }
+
+    public synchronized DifferentialDriveWheelSpeeds getWheelSpeeds(){
+        DifferentialDriveWheelSpeeds speeds = new DifferentialDriveWheelSpeeds(getLeftDistance(), getRightVelocity());
+        return speeds;
     }
 
     /**

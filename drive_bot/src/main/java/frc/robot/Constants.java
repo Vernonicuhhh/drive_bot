@@ -1,6 +1,8 @@
 package frc.robot;
 
 import edu.wpi.first.wpilibj.controller.SimpleMotorFeedforward;
+import edu.wpi.first.wpilibj.kinematics.DifferentialDriveKinematics;
+import edu.wpi.first.wpilibj.trajectory.constraint.DifferentialDriveVoltageConstraint;
 import edu.wpi.first.wpilibj.util.Units;
 
 public class Constants {
@@ -22,26 +24,16 @@ public class Constants {
     public static class DriveConstants{
         public static final double STICK_DEADBAND = 0.1;
         public static final double MAX_SPEED_TELE = 5;
-        // voltage needed to overcome the motor's static friction
-      /*  public static final double kS = .758;
 
-        //voltage needed to hold (cruise) at a given velocity.
-        public static final double kA = .0986;
-
-        // voltage needed to induce a given acceleration at the motor shaft
-        public static final double kV = .782;
-
-        public static final double kP = 2.5E-3;//-9;
-*/
         public static final double kS = .755;
 
-        //voltage needed to hold (cruise) at a given velocity.
+        // voltage needed to induce a given acceleration at the motor shaft
         public static final double kA = .183;
 
+        //voltage needed to hold (cruise) at a given velocity.
         public static final double kV = 1.58;
 
         public static final double kP = 3.32E-2;
-        // voltage needed to induce a given acceleration at the motor shaft
         public static final SimpleMotorFeedforward VELOCITY_FEED_FORWARD = new SimpleMotorFeedforward(kS, kV,kA);
 
         public static final double kSAngular =  1.21;
@@ -59,7 +51,6 @@ public class Constants {
         public static final double OPEN_LOOP_RAMP = .25;
 
 
-
         public static final double MAX_SPEED_TELEOP = 3.25; 
         public static final double MAX_ANGULAR_VELOCITY = 3.25;  //MUST BE IN RAD/S
 
@@ -69,5 +60,12 @@ public class Constants {
         public static final double TURN_P = .02;
         public static final double TURN_I = 0;
         public static final double TURN_D = 0;
+
+        // auto constants
+        public static final DifferentialDriveKinematics DRIVE_KINEMATICS = new DifferentialDriveKinematics(PhysicalConstants.TRACK_WIDTH_METERS);
+        public static final double MAX_SPEED_AUTO = 3.45;
+        public static final double MAX_VOLTAGE_AUTO = 10;
+        public static final DifferentialDriveVoltageConstraint VOLTAGE_CONSTRAINT= new DifferentialDriveVoltageConstraint(VELOCITY_FEED_FORWARD, DRIVE_KINEMATICS, MAX_VOLTAGE_AUTO);
+
     }
 }
