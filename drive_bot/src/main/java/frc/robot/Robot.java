@@ -11,6 +11,9 @@ import java.util.concurrent.Executors;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import frc.auto.AutoRoutine;
+import frc.auto.AutoRoutineGenerator;
 import frc.subsystems.Drive;
 import frc.subsystems.RobotTracker;
 import frc.subsystems.VisionManager;
@@ -23,10 +26,6 @@ import frc.util.multithreading.ThreadScheduler;
  * project.
  */
 public class Robot extends TimedRobot {
-  private static final String kDefaultAuto = "Default";
-  private static final String kCustomAuto = "My Auto";
-  private String m_autoSelected;
-  private final SendableChooser<String> m_chooser = new SendableChooser<>();
 
   private Drive drive = Drive.getInstance();
   private RobotTracker tracker = RobotTracker.getInstance();
@@ -79,24 +78,16 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void autonomousInit() {
-    m_autoSelected = m_chooser.getSelected();
-    // m_autoSelected = SmartDashboard.getString("Auto Selector", kDefaultAuto);
-    System.out.println("Auto selected: " + m_autoSelected);
     scheduler.resume();
+    AutoRoutine option = AutoRoutineGenerator.simpleLineTest();
+    auto = new Thread(option);
+    auto.start();
   }
 
   /** This function is called periodically during autonomous. */
   @Override
   public void autonomousPeriodic() {
-    switch (m_autoSelected) {
-      case kCustomAuto:
-        // Put custom auto code here
-        break;
-      case kDefaultAuto:
-      default:
-        // Put default auto code here
-        break;
-    }
+    SmartDashboard.putBoolean("thread", auto.interrupted());
   }
 
   /** This function is called once when teleop is enabled. */
@@ -105,14 +96,17 @@ public class Robot extends TimedRobot {
     Drive.getInstance().setTeleop();
     tracker.resetOdometry();
     scheduler.resume();
+    visionManager.setOn();
     Drive.getInstance().resetGyro();
   }
 
   /** This function is called periodically during operator control. */
   @Override
   public void teleopPeriodic() {
-    if(leftStick.getRawButton(1))
-      Drive.getInstance().turnToAngle(tracker.getOdometry().getRotation().getDegrees()-visionManager.getTargetYaw());
+    if(rightStick.getRawButton(1))
+      Drive.getInstance().editPIDGains(0, 0, 2);
+    if(rightStick.getRawButton(2))
+      Drive.getInstance().setTeleop();
 
   }
 

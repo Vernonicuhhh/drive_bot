@@ -15,6 +15,7 @@ import edu.wpi.first.wpilibj.SPI;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.controller.PIDController;
 import edu.wpi.first.wpilibj.controller.RamseteController;
+import edu.wpi.first.wpilibj.geometry.Pose2d;
 import edu.wpi.first.wpilibj.geometry.Rotation2d;
 import edu.wpi.first.wpilibj.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.kinematics.DifferentialDriveWheelSpeeds;
@@ -51,7 +52,8 @@ public class Drive extends Threaded {
     private RamseteController ramseteController;
     private double previousTime;
 
-    private PIDController turnPID;
+    private SynchronousPID turnPID;
+    private SynchronousPID forwardPID;
 
     DifferentialDrivetrainSim driveSim;
 
@@ -94,9 +96,8 @@ public class Drive extends Threaded {
         rightMaster.setNeutralMode(NeutralMode.Coast);
         rightSlave.setNeutralMode(NeutralMode.Coast);
 
-        //turnPID = new SynchronousPID(-.0001, 0, 0, 0);
-        //turnPID = new PIDController(.0250033,0,.000725,.01); //.0250033 //.000615
-        turnPID = new PIDController(.01862,0,.003863555105);
+        turnPID = new SynchronousPID(-.015, 0, .007,0);//target tracking PID
+        //turnPID = new SynchronousPID(-.008, 0, 0,0);//cargo tracking
 
         ramseteController = new RamseteController();
         ramseteTimer = new Timer();
@@ -181,7 +182,6 @@ public class Drive extends Threaded {
         updatePathController();
     }
 
-
     public synchronized void setTracking(){
         driveState = DriveState.VISION_TRACKING;
     }
@@ -225,17 +225,15 @@ public class Drive extends Threaded {
     private void updateTurn(){
      double error = desiredHeading.getDegrees()-getHeading();
      SmartDashboard.putNumber("error", error);
-     double deltaSpeed = turnPID.calculate(getHeading(), desiredHeading.getDegrees());
+     double deltaSpeed = turnPID.update(desiredHeading.getDegrees());
      SmartDashboard.putNumber("heading", getHeading());
      SmartDashboard.putNumber("desired heading", desiredHeading.getDegrees());
-     SmartDashboard.putNumber("deltaSpeed", deltaSpeed);
      
 
         if(Math.abs(deltaSpeed)<1E-1){
-            /*synchronized(this){
+            synchronized(this){
                 driveState = DriveState.TELEOP;
-            }*/
-            setRawSpeeds(.3, .3);
+            }
         }
 
         else
@@ -379,14 +377,26 @@ public class Drive extends Threaded {
     }
 
     private void updateVisionTracking(){
-        double deltaSpeed = turnPID.calculate(-VisionManager.getInstance().getTargetYaw(), 0);
-        setRawSpeeds(deltaSpeed, -deltaSpeed);
+        //double deltaSpeed = turnPID.calculate(-VisionManager.getInstance().getTargetYaw(), 0);
+        Rotation2d onTarget = new Rotation2d(0);
+        double error = onTarget.rotateBy(VisionManager.getInstance().getYawRotation2d()).unaryMinus().getDegrees();
+        SmartDashboard.putNumber("Yaw error", error);
+        double deltaSpeed = turnPID.update(error);
+     SmartDashboard.putNumber("deltaSpeed", deltaSpeed);
+
+		if (Math.abs(error) < 10 && deltaSpeed < 0.2) {
+			tankDriveVelocity(0, 0);
+			synchronized (this) {
+				driveState = DriveState.TELEOP;
+          } 
+        }
+        tankDriveVelocity(deltaSpeed*Constants.DriveConstants.MAX_SPEED_TELE,-deltaSpeed*Constants.DriveConstants.MAX_SPEED_TELE);
     }
 
     private double getPathPercentage(){
         return ramseteTimer.get()/currentTrajectory.getTotalTimeSeconds();
     }
-    private boolean isFinished(){
+    public boolean isFinished(){
         return driveState == DriveState.DONE;
     }
 
@@ -403,7 +413,9 @@ public class Drive extends Threaded {
     public synchronized void editPIDGains(double kPInc, double kIInc, double kDInc){
         turnPID.setP(turnPID.getP()+kPInc);
         turnPID.setI(turnPID.getI()+kIInc);
-        turnPID.setD(turnPID.getD()+kDInc);
+        turnPID.setD(turnPID.getD()*kDInc);
+        SmartDashboard.putNumber("Proportional", turnPID.getP());
+        SmartDashboard.putNumber("Derrivative", turnPID.getD());
     }
 
     /**
@@ -423,7 +435,7 @@ public class Drive extends Threaded {
     }
 
     public synchronized DifferentialDriveWheelSpeeds getWheelSpeeds(){
-        DifferentialDriveWheelSpeeds speeds = new DifferentialDriveWheelSpeeds(getLeftDistance(), getRightVelocity());
+        DifferentialDriveWheelSpeeds speeds = new DifferentialDriveWheelSpeeds(getLeftVelocity(), getRightVelocity());
         return speeds;
     }
 

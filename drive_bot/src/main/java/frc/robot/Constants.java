@@ -23,7 +23,7 @@ public class Constants {
 
     public static class DriveConstants{
         public static final double STICK_DEADBAND = 0.1;
-        public static final double MAX_SPEED_TELE = 5;
+    public static final double MAX_SPEED_TELE = 3;
 
         public static final double kS = .755;
 
@@ -67,5 +67,13 @@ public class Constants {
         public static final double MAX_VOLTAGE_AUTO = 10;
         public static final DifferentialDriveVoltageConstraint VOLTAGE_CONSTRAINT= new DifferentialDriveVoltageConstraint(VELOCITY_FEED_FORWARD, DRIVE_KINEMATICS, MAX_VOLTAGE_AUTO);
 
+        public static final double MAX_ACCEL_AUTO = 2;
+
+    }
+
+    public static class visionConstants{
+        public static final double CAMERA_FOV = 75;
+        public static final double CAMERA_HEIGHT_METERS = .5;
+        public static final double CAMERA_PITCH_RADIANS = 0;
     }
 }

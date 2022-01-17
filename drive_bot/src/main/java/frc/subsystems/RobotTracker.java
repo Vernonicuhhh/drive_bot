@@ -25,8 +25,8 @@ public class RobotTracker extends Threaded {
     Field2d field = new Field2d();
 
     //TODO: Tune Gains for stdDev matrices
-    Matrix<N5, N1> stateStdDevs = VecBuilder.fill(0.05, 0.05, Units.degreesToRadians(5), 0.05, 0.05);
-    Matrix<N3, N1> localMeasurementStdDevs = VecBuilder.fill(0.01, 0.01, Units.degreesToRadians(0.1));
+    Matrix<N5, N1> stateStdDevs = VecBuilder.fill(0.05, 0.05, .001, 0.05, 0.05);
+    Matrix<N3, N1> localMeasurementStdDevs = VecBuilder.fill(.05, .05, Units.degreesToRadians(1.25));
     Matrix<N3, N1> visionMeasurementStdDevs = VecBuilder.fill(0.01, 0.01, Units.degreesToRadians(0.1));
 
     DifferentialDrivePoseEstimator poseEstimator = new DifferentialDrivePoseEstimator(
@@ -34,7 +34,8 @@ public class RobotTracker extends Threaded {
         new Pose2d(),
         stateStdDevs,
         localMeasurementStdDevs,
-        visionMeasurementStdDevs
+        visionMeasurementStdDevs,
+        .02
         );
 
     @Override
@@ -48,14 +49,17 @@ public class RobotTracker extends Threaded {
             poseEstimator.update(drive.getRotation2d(), drive.getWheelSpeeds(), drive.getLeftDistance(), drive.getRightDistance());
             poseMeters = differentialDriveOdometry.getPoseMeters();
             estimatedPose = poseEstimator.getEstimatedPosition();
-            field.setRobotPose(poseMeters);
             field.setRobotPose(estimatedPose);
+            
 
 
 			SmartDashboard.putNumber("PoseX", differentialDriveOdometry.getPoseMeters().getTranslation().getX());
 			SmartDashboard.putNumber("PoseY", differentialDriveOdometry.getPoseMeters().getTranslation().getY());
             SmartDashboard.putNumber("PoseR", differentialDriveOdometry.getPoseMeters().getRotation().getDegrees());
             SmartDashboard.putData("minimap",field);
+			SmartDashboard.putNumber("Estimated PoseX", poseEstimator.getEstimatedPosition().getTranslation().getX());
+			SmartDashboard.putNumber("Estimated PoseY", poseEstimator.getEstimatedPosition().getTranslation().getY());
+            SmartDashboard.putNumber("Estimated PoseR", poseEstimator.getEstimatedPosition().getRotation().getDegrees());
         }
     }
 
